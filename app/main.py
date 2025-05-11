@@ -1,8 +1,16 @@
 import uvicorn
 from fastapi import FastAPI
 from app.api.api_v1 import api_v1
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Chat Application")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Your Angular app URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(api_v1, prefix="/api/v1")
 
