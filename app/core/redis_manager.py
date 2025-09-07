@@ -1,38 +1,49 @@
 import redis.asyncio as aioredis
-import asyncio
+import logging
 from app.core.config import app_settings
 
+# This object will hold the Redis connection pool instance
+redis_client: aioredis.Redis = None
 
-class RedisManager:
-    _instance = None
-    _lock = asyncio.Lock()
+logger = logging.getLogger(__name__)
 
-    def __new__(cls, *args, **kwargs):
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = super().__new__(cls)
 
-        return cls._instance
+async def get_redis_client() -> aioredis.Redis:
+    """
+    Dependency function to get the Redis client.
+    This ensures that the Redis client is available in your path operations.
+    """
+    if redis_client is None:
+        raise RuntimeError("Redis client is not initialized.")
+    return redis_client
 
-    def __init__(
-        self, host=app_settings.REDIS_HOST, port=app_settings.REDIS_PORT, db=0
-    ):
-        if not hasattr(self, "_client"):
-            self._client = aioredis.Redis(
-                host=host, port=port, db=db, decode_responses=True
-            )
 
-    def get_client(self):
-        return self._client
+async def connect_to_redis():
+    """
+    Initializes the Redis connection pool.
+    This is called once on application startup.
+    """
+    global redis_client
+    logger.info("Connecting to Redis...")
+    redis_client = aioredis.from_url(
+        f"redis://{app_settings.REDIS_HOST}:{app_settings.REDIS_PORT}",
+        decode_responses=True,
+    )
+    try:
+        await redis_client.ping()
+        logger.info("Successfully connected to Redis.")
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis: {e}")
+        raise
 
-    async def set_value(self, key, value, ex=None):
-        return await self._client.set(name=key, value=value, ex=ex)
 
-    async def get_value(self, key):
-        return await self._client.get(name=key)
-
-    async def delete_key(self, key):
-        return await self._client.delete(key)
-
-    async def key_exists(self, key):
-        return await self._client.exists(key) > 0
+async def close_redis_connection():
+    """
+    Closes the Redis connection pool.
+    This is called once on application shutdown.
+    """
+    global redis_client
+    if redis_client:
+        logger.info("Closing Redis connection...")
+        await redis_client.close()
+        logger.info("Redis connection closed.")
